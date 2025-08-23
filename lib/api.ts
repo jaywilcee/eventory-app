@@ -5,16 +5,14 @@ type ApiResp<T> = ApiOk<T> | ApiErr;
 
 const API_URL = '/api/eventory-proxy';
 
-// Generic helper: call<T>() returns data typed as T
-export async function call<T = unknown>(method: string, data: unknown): Promise<T> {
+export async function call<T = unknown>(method: string, data: unknown, clubId: string): Promise<T> {
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ method, data }),
+    body: JSON.stringify({ method, data, clubId })
   });
-
-  const json = (await res.json()) as ApiResp<T>;
+  const json = await res.json() as { ok: boolean; data?: T; error?: string };
   if (!json.ok) throw new Error(json.error || 'Unknown error');
-  return json.data;
+  return json.data as T;
 }
 
