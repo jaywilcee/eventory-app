@@ -1,4 +1,6 @@
+// pages/clubs.tsx
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { call } from '../lib/api';
 import { setSelectedClubId } from '../lib/club';
 
@@ -22,8 +24,10 @@ export default function Clubs() {
         const data = await call<ClubRow[]>('LIST_CLUBS', {}, 'admin');
         setRows(data);
         setStatus(`Loaded ${data.length} clubs`);
-      } catch (e) {
-        setStatus('Error loading clubs');
+      } catch (err: unknown) {
+        // Use the error so ESLint is happy
+        const msg = err instanceof Error ? err.message : String(err);
+        setStatus('Error loading clubs: ' + msg);
       }
     })();
   }, []);
@@ -39,22 +43,36 @@ export default function Clubs() {
       <p>{status}</p>
       <table border={1} cellPadding={6} style={{ borderCollapse: 'collapse', marginTop: 12 }}>
         <thead>
-          <tr><th>Club ID</th><th>Name</th><th>Time Zone</th><th>Calendar</th><th>Label</th><th>Action</th></tr>
+          <tr>
+            <th>Club ID</th>
+            <th>Name</th>
+            <th>Time Zone</th>
+            <th>Calendar</th>
+            <th>Label</th>
+            <th>Action</th>
+          </tr>
         </thead>
         <tbody>
-          {rows.map(r => (
+          {rows.map((r) => (
             <tr key={r.clubId}>
               <td>{r.clubId}</td>
               <td>{r.name}</td>
               <td>{r.timeZone}</td>
-              <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.calendarId}</td>
+              <td style={{ maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {r.calendarId}
+              </td>
               <td>{r.label}</td>
-              <td><button onClick={() => selectClub(r.clubId)}>Select</button></td>
+              <td>
+                <button onClick={() => selectClub(r.clubId)}>Select</button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <p style={{ marginTop: 12 }}>After selecting, go back to the <a href="/">home page</a> and run actions for that club.</p>
+
+      <p style={{ marginTop: 12 }}>
+        After selecting, go back to the <Link href="/">home page</Link> and run actions for that club.
+      </p>
     </div>
   );
 }
