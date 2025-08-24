@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { call } from '../lib/api';
 import { setSelectedClubId } from '../lib/club';
+import { getSelectedClubId } from '../lib/club';
 
 type ClubRow = {
   clubId: string;
@@ -16,7 +17,7 @@ type ClubRow = {
 export default function Clubs() {
   const [rows, setRows] = useState<ClubRow[]>([]);
   const [status, setStatus] = useState('');
-
+  const selected = typeof window !== 'undefined' ? getSelectedClubId() : null;
   useEffect(() => {
     (async () => {
       try {
@@ -40,6 +41,7 @@ export default function Clubs() {
   return (
     <div style={{ padding: 20 }}>
       <h1>Eventory — Clubs</h1>
+      <p>{selected ? `Selected club: ${selected}` : 'No club selected'}</p>
       <p>{status}</p>
       <table border={1} cellPadding={6} style={{ borderCollapse: 'collapse', marginTop: 12 }}>
         <thead>
@@ -69,6 +71,10 @@ export default function Clubs() {
           ))}
         </tbody>
       </table>
+
+      <pre style={{marginTop:12, whiteSpace:'pre-wrap'}}>
+        {rows.length ? JSON.stringify(rows, null, 2) : ''}
+      </pre>
 
       <p style={{ marginTop: 12 }}>
         After selecting, go back to the <Link href="/">home page</Link> and run actions for that club.
