@@ -2,8 +2,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { call } from '../lib/api';
-import { setSelectedClubId } from '../lib/club';
-import { getSelectedClubId } from '../lib/club';
+import { getSelectedClubId, setSelectedClubId } from '../lib/club';
 
 type ClubRow = {
   clubId: string;
@@ -17,8 +16,14 @@ type ClubRow = {
 export default function Clubs() {
   const [rows, setRows] = useState<ClubRow[]>([]);
   const [status, setStatus] = useState('');
-  const selected = typeof window !== 'undefined' ? getSelectedClubId() : null;
+  const [selected, setSelected] = useState<string | null>(null);
+  const [hydrated, setHydrated] = useState(false); // prevents hydration mismatch
+
+  // Load selected club & list of clubs after the component mounts (client only)
   useEffect(() => {
+    setSelected(getSelectedClubId());
+    setHydrated(true);
+
     (async () => {
       try {
         setStatus('Loading clubs...');
@@ -26,7 +31,6 @@ export default function Clubs() {
         setRows(data);
         setStatus(`Loaded ${data.length} clubs`);
       } catch (err: unknown) {
-        // Use the error so ESLint is happy
         const msg = err instanceof Error ? err.message : String(err);
         setStatus('Error loading clubs: ' + msg);
       }
@@ -35,14 +39,19 @@ export default function Clubs() {
 
   function selectClub(id: string) {
     setSelectedClubId(id);
+    setSelected(id); // update UI immediately
     setStatus(`Selected club: ${id}`);
   }
 
   return (
     <div style={{ padding: 20 }}>
       <h1>Eventory — Clubs</h1>
-      <p>{selected ? `Selected club: ${selected}` : 'No club selected'}</p>
+
+      {/* Render nothing until hydrated to avoid SSR/CSR mismatch */}
+      <p>{hydrated ? (selected ? `Selected club: ${selected}` : 'No club selected') : '\u00A0'}</p>
+
       <p>{status}</p>
+
       <table border={1} cellPadding={6} style={{ borderCollapse: 'collapse', marginTop: 12 }}>
         <thead>
           <tr>
@@ -71,10 +80,6 @@ export default function Clubs() {
           ))}
         </tbody>
       </table>
-
-      <pre style={{marginTop:12, whiteSpace:'pre-wrap'}}>
-        {rows.length ? JSON.stringify(rows, null, 2) : ''}
-      </pre>
 
       <p style={{ marginTop: 12 }}>
         After selecting, go back to the <Link href="/">home page</Link> and run actions for that club.

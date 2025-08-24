@@ -53,6 +53,23 @@ export default function Home() {
     }
   }
 
+  async function publishSpecials() {
+    setStatus('Publishing birthdays & anniversaries to calendar...');
+    try {
+      const clubId = ensureClub();
+      // pass {dryRun:true} to test without writing; remove or set false to write
+      const data = await call<{ ok: boolean; bdayCount: number; annivCount: number }>(
+        'PUBLISH_SPECIALS',
+        { dryRun: false },
+        clubId
+      );
+      setStatus(`Published: ${data.bdayCount} birthdays, ${data.annivCount} anniversaries`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus('Error: ' + msg);
+    }
+  }
+
   return (
     <div style={{ padding: 20 }}>
       <h1>Eventory — Home</h1>
@@ -63,6 +80,7 @@ export default function Home() {
         <button onClick={testPing}>Test PING</button>
         <button onClick={loadContacts}>Load from Google Contacts</button>
         <button onClick={syncToFirestore}>Sync into Firestore</button>
+        <button onClick={publishSpecials}>Publish Birthdays & Anniversaries</button>
       </div>
       <p>{status}</p>
       <table border={1} cellPadding={6} style={{ borderCollapse: 'collapse', marginTop: 12 }}>
