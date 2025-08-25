@@ -22,35 +22,34 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   res.setHeader('Access-Control-Allow-Methods', 'POST,GET,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-  if (req.method !== 'POST') {
-    res.status(405).json({ ok: false, error: 'Use POST' });
-    return;
-  }
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Use POST' });
 
   try {
     const body: ProxyBody =
-      typeof req.body === 'string' ? JSON.parse(req.body) : (req.body as ProxyBody || {});
+      typeof req.body === 'string' ? JSON.parse(req.body) : ((req.body as ProxyBody) || {});
     const { method, data, clubId } = body;
 
     const { gasUrl, secret } = getTenant(clubId);
-    const ts = Date.now();
+    if (!gasUrl || !secret) throw new Error(`Tenant config incomplete for clubId="${clubId}".`);
 
-    // Sign {method, data} exactly as verified in GAS
-    const canonical = JSON.stringify({ method, data });
-    const sig = crypto.createHmac('sha256', secret).update(canonical).digest('base64');
+    const ts = Date.now();
+    const canon = JSON.stringify({ method, data }); // exact string we sign
+    const sig = crypto.createHmac('sha256', secret).update(canon).digest('base64');
 
     const upstream = await fetch(gasUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ method, data, sig, ts }),
+      body: JSON.stringify({ method, data, sig, ts, canon }), // <-- include canon
     });
 
     const text = await upstream.text();
-    res.status(upstream.status).send(text);
+    try {
+      const json = JSON.parse(text);
+      res.status(upstream.status).json(json);
+    } catch {
+      res.status(502).json({ ok: false, error: 'Upstream returned non-JSON', snippet: text.slice(0, 200) });
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     res.status(400).json({ ok: false, error: message });
