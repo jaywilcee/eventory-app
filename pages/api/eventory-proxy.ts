@@ -34,13 +34,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (!gasUrl || !secret) throw new Error(`Tenant config incomplete for clubId="${clubId}".`);
 
     const ts = Date.now();
-    const canon = JSON.stringify({ method, data }); // exact string we sign
+    const canon = JSON.stringify({ method, data });  // ← exact string we sign
     const sig = crypto.createHmac('sha256', secret).update(canon).digest('base64');
 
     const upstream = await fetch(gasUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ method, data, sig, ts, canon }), // <-- include canon
+      body: JSON.stringify({ method, data, sig, ts, canon }), // ← include canon
     });
 
     const text = await upstream.text();
