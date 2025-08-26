@@ -12,7 +12,7 @@ type SpecialItem = {
   id: string;
   summary: string;
   type: SpecialType;
-  label?: string;            // for memorial/event
+  label?: string;
   contactId?: string;
   feedId?: string;
   start: string;
@@ -21,15 +21,36 @@ type SpecialItem = {
 };
 type SpecialsResp = { clubId: string; count: number; days: number; items: SpecialItem[] };
 
+type PublishResp = {
+  ok: boolean;
+  clubId: string;
+  calendarId: string;
+  bdayCount: number;
+  annivCount: number;
+  memorialCount?: number;
+  eventCount?: number;
+  errors: number;
+  members: number;
+  dryRun: boolean;
+};
+
 export default function Specials() {
   const [hydrated, setHydrated] = useState(false);
   const [selectedClub, setSelectedClub] = useState<string | null>(null);
-  const [status, setStatus] = useState('');
+
+  // separate statuses so they don't overwrite each other
+  const [listStatus, setListStatus] = useState('');
+  const [pubStatus, setPubStatus] = useState('');
+
   const [items, setItems] = useState<SpecialItem[]>([]);
   const [range, setRange] = useState<RangeKey>('30d');
   const [depFilter, setDepFilter] = useState<DepartedFilter>('include');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [loading, setLoading] = useState(false);
+
+  // publish controls
+  const [pubBusy, setPubBusy] = useState(false);
+  const [dryRun, setDryRun] = useState(false);
 
   function ensureClub(): string {
     const id = getSelectedClubId();
@@ -45,20 +66,46 @@ export default function Specials() {
 
   async function load() {
     setLoading(true);
-    setStatus(`Loading next ${range}...`);
+    setListStatus(`Loading next ${range}...`);
     try {
       const clubId = ensureClub();
       const days = daysForRange(range);
       const data = await call<SpecialsResp>('GET_UPCOMING_SPECIALS', { days }, clubId);
       setItems(data.items);
-      setStatus(`Found ${data.count} items for next ${data.days} days`);
+      setListStatus(`Found ${data.count} items for next ${data.days} days`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      setStatus('Error: ' + msg);
+      setListStatus('Error: ' + msg);
     } finally {
       setLoading(false);
     }
   }
+
+  async function publishSpecialsNow() {
+    setPubBusy(true);
+    setPubStatus(dryRun ? 'Dry run: publishing preview…' : 'Publishing specials…');
+    try {
+      const clubId = ensureClub();
+      const data = await call<PublishResp>('PUBLISH_SPECIALS', dryRun ? { dryRun: true } : {}, clubId);
+      const mc = data.memorialCount ?? 0;
+      const ec = data.eventCount ?? 0;
+      setPubStatus(`${dryRun ? 'Dry run' : 'Published'} — 🎂 ${data.bdayCount}, 💍 ${data.annivCount}, 🕯️ ${mc}, ⭐ ${ec} (errors: ${data.errors})`);
+      // Refresh list AFTER setting pubStatus; listStatus will change but pubStatus stays
+      await load();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPubStatus('Error publishing: ' + msg);
+    } finally {
+      setPubBusy(false);
+    }
+  }
+
+  // Optional: auto-clear publish note after 10s
+  useEffect(() => {
+    if (!pubStatus) return;
+    const t = setTimeout(() => setPubStatus(''), 10_000);
+    return () => clearTimeout(t);
+  }, [pubStatus]);
 
   useEffect(() => {
     setHydrated(true);
@@ -73,15 +120,13 @@ export default function Specials() {
   }, [range, hydrated]);
 
   const filtered = items.filter((it) => {
-    // departed filter
     if (it.memberStatus) {
       const departed = it.memberStatus.toLowerCase() === 'departed';
       if (depFilter === 'hide' && departed) return false;
       if (depFilter === 'only' && !departed) return false;
     } else if (depFilter === 'only') {
-      return false; // holidays etc. have no memberStatus
+      return false;
     }
-    // type filter
     if (typeFilter !== 'all' && it.type !== typeFilter) return false;
     return true;
   });
@@ -96,7 +141,7 @@ export default function Specials() {
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <label htmlFor="range">Range:</label>
-        <select id="range" value={range} onChange={(e) => setRange(e.target.value as RangeKey)} disabled={loading}>
+        <select id="range" value={range} onChange={(e) => setRange(e.target.value as RangeKey)} disabled={loading || pubBusy}>
           <option value="7d">Next 7 days</option>
           <option value="30d">Next 30 days</option>
           <option value="1y">Next 1 year</option>
@@ -104,7 +149,7 @@ export default function Specials() {
         </select>
 
         <label htmlFor="type">Type:</label>
-        <select id="type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as TypeFilter)} disabled={loading}>
+        <select id="type" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as TypeFilter)} disabled={loading || pubBusy}>
           <option value="all">All</option>
           <option value="birthday">Birthdays</option>
           <option value="anniversary">Anniversaries</option>
@@ -114,16 +159,35 @@ export default function Specials() {
         </select>
 
         <label htmlFor="dep">Departed:</label>
-        <select id="dep" value={depFilter} onChange={(e) => setDepFilter(e.target.value as DepartedFilter)} disabled={loading}>
+        <select id="dep" value={depFilter} onChange={(e) => setDepFilter(e.target.value as DepartedFilter)} disabled={loading || pubBusy}>
           <option value="include">Include</option>
           <option value="hide">Hide</option>
           <option value="only">Only departed</option>
         </select>
 
-        <button onClick={load} disabled={loading}>Refresh</button>
+        {/* Publish controls */}
+        <label htmlFor="dry" style={{ marginLeft: 12 }}>Dry run:</label>
+        <input
+          id="dry"
+          type="checkbox"
+          checked={dryRun}
+          onChange={(e) => setDryRun(e.target.checked)}
+          disabled={loading || pubBusy}
+        />
+        <button onClick={publishSpecialsNow} disabled={loading || pubBusy || !selectedClub}>
+          {pubBusy ? 'Working…' : 'Publish specials now'}
+        </button>
+
+        <button onClick={load} disabled={loading || pubBusy}>Refresh</button>
       </div>
 
-      <p>{status}</p>
+      {/* Separate status lines */}
+      {pubStatus && (
+        <p style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, background: '#eef9f0' }}>
+          {pubStatus}
+        </p>
+      )}
+      <p style={{ marginTop: 6 }}>{listStatus}</p>
 
       <table border={1} cellPadding={6} style={{ borderCollapse: 'collapse', marginTop: 12, width: '100%' }}>
         <thead>
