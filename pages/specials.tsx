@@ -183,7 +183,7 @@ export default function Specials() {
 
       {/* Separate status lines */}
       {pubStatus && (
-        <p style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, background: '#eef9f0' }}>
+        <p style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, background: '#626368' }}>
           {pubStatus}
         </p>
       )}
