@@ -1,3 +1,4 @@
+// pages/specials.tsx
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { call } from '../lib/api';
@@ -19,6 +20,7 @@ type SpecialItem = {
   end: string;
   memberStatus?: 'active' | 'departed' | string;
 };
+
 type SpecialsResp = { clubId: string; count: number; days: number; items: SpecialItem[] };
 
 type PublishResp = {
@@ -33,6 +35,31 @@ type PublishResp = {
   members: number;
   dryRun: boolean;
 };
+
+/** ---------- Helpers (UI + filter) ---------- **/
+
+// True if this is a holiday entry (holidays ignore departed filtering)
+function isHoliday(it: SpecialItem): boolean {
+  return String(it.type).toLowerCase() === 'holiday';
+}
+
+// Robust departed checker:
+// - Memorials are inherently about someone departed -> always true
+// - Otherwise, normalize memberStatus and allow legacy values (TRUE/Yes/Deceased)
+function isDeparted(it: SpecialItem): boolean {
+  if (String(it.type).toLowerCase() === 'memorial') return true;
+  const raw = String(it.memberStatus ?? '').trim().toLowerCase();
+  return raw === 'departed' || raw === 'deceased' || raw === 'true' || raw === 'yes';
+}
+
+// Formats an ISO date or dateTime to a short, readable date for display.
+// (You already show the raw ISO; keep or swap to this if you prefer.)
+function fmtDate(iso: string): string {
+  // If you prefer the raw ISO, you can simply `return iso;`
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString(undefined, { weekday: 'short', day: '2-digit', month: 'short' });
+}
 
 export default function Specials() {
   const [hydrated, setHydrated] = useState(false);
@@ -119,15 +146,20 @@ export default function Specials() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range, hydrated]);
 
+  // === Filtering logic (neutral & robust) ===
   const filtered = items.filter((it) => {
-    if (it.memberStatus) {
-      const departed = it.memberStatus.toLowerCase() === 'departed';
-      if (depFilter === 'hide' && departed) return false;
-      if (depFilter === 'only' && !departed) return false;
+    const departed = isDeparted(it);
+
+    // Departed filter (holidays ignore this; memorials always "departed")
+    if (depFilter === 'hide') {
+      if (departed && !isHoliday(it)) return false;
     } else if (depFilter === 'only') {
-      return false;
+      if (!departed) return false; // show only departed items (holidays won't pass)
     }
-    if (typeFilter !== 'all' && it.type !== typeFilter) return false;
+
+    // Type filter
+    if (typeFilter !== 'all' && String(it.type) !== typeFilter) return false;
+
     return true;
   });
 
@@ -183,7 +215,7 @@ export default function Specials() {
 
       {/* Separate status lines */}
       {pubStatus && (
-        <p style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, background: '#626368' }}>
+        <p style={{ marginTop: 6, padding: '6px 10px', borderRadius: 8, background: '#626368', color: '#fff' }}>
           {pubStatus}
         </p>
       )}
@@ -192,7 +224,7 @@ export default function Specials() {
       <table border={1} cellPadding={6} style={{ borderCollapse: 'collapse', marginTop: 12, width: '100%' }}>
         <thead>
           <tr>
-            <th>Date</th>
+            <th style={{ whiteSpace: 'nowrap' }}>Date</th>
             <th>Title</th>
             <th>Type</th>
             <th>Label</th>
@@ -202,17 +234,42 @@ export default function Specials() {
           </tr>
         </thead>
         <tbody>
-          {filtered.map((it) => (
-            <tr key={it.id} style={it.memberStatus === 'departed' ? { opacity: 0.75 } : undefined}>
-              <td>{it.start}</td>
-              <td>{it.summary}</td>
-              <td>{it.type}</td>
-              <td>{it.label || ''}</td>
-              <td>{it.memberStatus || ''}</td>
-              <td>{it.contactId || ''}</td>
-              <td>{it.feedId || ''}</td>
-            </tr>
-          ))}
+          {filtered.map((it) => {
+            const departed = isDeparted(it);
+            const rowStyle = departed && !isHoliday(it)
+              ? { opacity: 0.8, fontStyle: 'italic' as const }
+              : undefined;
+
+            return (
+              <tr key={it.id} style={rowStyle} title={departed ? 'Member is departed' : undefined}>
+                {/* Use fmtDate(it.start) if you prefer a friendly date */}
+                <td>{it.start}</td>
+                <td>
+                  <span>{it.summary}</span>
+                  {/* Neutral visual pill for departed (not shown on holidays) */}
+                  {departed && !isHoliday(it) && (
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        padding: '2px 6px',
+                        borderRadius: 999,
+                        fontSize: 12,
+                        border: '1px solid #ccc',
+                        background: '#f7f7f7',
+                      }}
+                    >
+                      Departed
+                    </span>
+                  )}
+                </td>
+                <td>{it.type}</td>
+                <td>{it.label || ''}</td>
+                <td>{it.memberStatus || ''}</td>
+                <td>{it.contactId || ''}</td>
+                <td>{it.feedId || ''}</td>
+              </tr>
+            );
+          })}
           {!filtered.length && (
             <tr>
               <td colSpan={7} style={{ textAlign: 'center', opacity: 0.7 }}>
